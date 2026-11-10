@@ -128,7 +128,7 @@ UI 不是"随便做个聊天页"，而是把微信里大家最熟悉的几件事
 环境要求：Go 1.26 及以上（`go.mod` 声明 `1.26.3`）。
 
 ```bash
-git clone [LocalSharedTools](https://github.com/zhiliaoya/LocalSharedTools)
+git clone https://github.com/zhiliaoya/LocalSharedTools
 cd LocalSharedTools
 go run .
 ```
