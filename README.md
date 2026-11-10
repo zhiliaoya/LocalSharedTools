@@ -130,6 +130,7 @@ UI 不是"随便做个聊天页"，而是把微信里大家最熟悉的几件事
 ```bash
 git clone https://github.com/zhiliaoya/LocalSharedTools
 cd LocalSharedTools
+go mod tidy
 go run .
 ```
 
