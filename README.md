@@ -64,9 +64,9 @@
 | 断线重连 | 指数退避，1s → 2s → 4s → … 上限 30s，回到页面自动补连 |
 | 时间分隔 | 相邻消息间隔超过 5 分钟，自动插入时间标签 |
 | 端口防冲突 | 借鉴 ServerGo 内核：端口被占自动顺延（最多试 100 个），二维码始终使用真实端口 |
-| 单实例保护 | 同一 exe 已经在跑，直接打开浏览器并退出，不重复起服务 |
+| 单实例保护 | Windows 走 `netstat` + Win32，Linux 走 `/proc`；同一 exe 已在跑就不再起第二个服务（Windows 会顺手打开旧实例） |
 | 移动端适配 | `100dvh` + `safe-area-inset-bottom`，刘海屏不挡输入框 |
-| 启动即用 | 启动后自动拉起默认浏览器；日志落文件，GUI 编译版也能排查 |
+| 启动即用 | Windows 下自动拉起默认浏览器；日志落文件，GUI 编译版也能排查 |
 
 ## 3. 界面：为什么长这样
 
@@ -144,6 +144,15 @@ go build -ldflags "-H windowsgui" -o LocalShT.exe .
 
 > 注意：`static/index.html` 必须和 exe 放在一起（程序会先找 exe 同级的 `static/`，再找当前工作目录的 `static/`），打包分发时别漏掉这个目录。
 
+Linux amd64（纯 Go 交叉编译，不需要装 Linux 工具链）：
+
+```bash
+CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath \
+  -ldflags "-s -w" -o LocalShT-linux-amd64 .
+```
+
+> Linux 下 `openBrowser` 不生效，启动后需手动打开终端打印的地址；单实例检测依赖 `/proc` 与进程 fd 读权限，容器内或旧实例属于其他用户时可能探测失败，会自动退回端口顺延。
+
 启动参数：
 
 | 参数 | 默认值 | 说明 |
@@ -163,7 +172,9 @@ go build -ldflags "-H windowsgui" -o LocalShT.exe .
 
 ```
 LocalSharedTools/
-├── main.go              # 全部后端逻辑：DB、Hub、路由、单实例检测
+├── main.go              # 后端逻辑：DB、Hub、路由、主流程
+├── instance_windows.go  # Windows 单实例检测：netstat + Win32
+├── instance_linux.go    # Linux 单实例检测：/proc/net/tcp + /proc/<pid>/fd
 ├── go.mod / go.sum
 ├── static/
 │   └── index.html       # 单文件前端：结构 + 样式 + 逻辑全在一起
@@ -171,7 +182,7 @@ LocalSharedTools/
 └── LocalShT-shared/     # 运行时生成：上传文件落盘（勿提交）
 ```
 
-没有 `pkg/`、没有 `internal/`、没有分层目录。这是一个刻意保持"单文件可读"的工具型项目：一个 `main.go` 加一个 `index.html`，打开就能从头读到尾。
+没有 `pkg/`、没有 `internal/`、没有分层目录。这是一个刻意保持"单文件可读"的工具型项目：`main.go` 是主流程，单实例检测按平台拆成两个小文件，外加一个 `index.html`，打开就能从头读到尾。
 
 ## 6. 架构：一条消息的旅程
 
@@ -253,7 +264,14 @@ for p := startPort; p < startPort+maxTries && p <= 65535; p++ {
 
 两个刻意的选择：**顺序试探而非随机端口**，地址可预测、方便口头告诉同事；**上限 100 个**，避免端口扫描式地无限找下去。
 
-再叠一层同 exe 识别：如果占用端口的就是同一个程序（`netstat` 找 PID → Win32 `QueryFullProcessImageName` 查 exe 路径 → 与自身路径比较），说明用户重复双击了，直接打开浏览器指向旧实例后退出，而不是再起第二个服务。
+再叠一层同 exe 识别：如果占用端口的就是同一个程序，说明用户重复双击了，直接打开浏览器指向旧实例后退出，而不是再起第二个服务。
+
+这一步在不同平台用的是不同原语，靠文件名后缀做编译期隔离：
+
+- **Windows**（`instance_windows.go`）：`netstat -ano` 找到 `LISTENING` 的 PID，再用 `OpenProcess` + `QueryFullProcessImageNameW` 取 exe 路径，忽略大小写比较。
+- **Linux**（`instance_linux.go`）：读 `/proc/net/tcp{,6}` 找 `LISTEN` 状态的 socket inode，遍历 `/proc/<pid>/fd` 反查 PID，最后比对 `/proc/<pid>/exe` 与自身路径（处理 ` (deleted)` 后缀）。
+
+`main.go` 只调用 `sameExeOnPort`，不再出现 `runtime.GOOS` 分支；检测失败时返回 `(0, false)`，退回端口顺延，不影响启动。
 
 ### 7.4 为什么数据库要「串行写」
 
@@ -311,7 +329,7 @@ WebSocket 事件只有两种，都是服务端 → 客户端：
 | 上传大小 | 无硬上限（64 MB 仅为内存阈值） | 大文件落临时文件；注意磁盘余量 |
 | 历史加载 | 默认最近 200 条（接口上限 2000） | 无分页；更早的消息仍在库里但页面不显示 |
 | 删除 / 搜索 | 未实现 | 定位是「临时中转」，消息用完即弃 |
-| 单实例检测 | 仅 Windows | 依赖 `netstat` 解析 + Win32 `QueryFullProcessImageName`；其他平台走端口顺延 |
+| 单实例检测 | Windows / Linux | 两个平台各有一份实现（`netstat` + Win32 / `/proc`）；macOS 等其他平台缺 `sameExeOnPort`，编译会失败，需补兜底文件 |
 | 静态资源 | 需 `static/` 随 exe 分发 | 尚未 `//go:embed`；打包时容易漏 |
 | 自动化测试 | 暂无 | `toViews`、`humanSize`、`withinRoot` 都是纯函数，适合补单元测试 |
 | 多用户 | 无在线列表 / 无 @ | 只区分「我」和「他人」，没有成员概念 |
@@ -490,6 +508,8 @@ WebSocket 事件只有两种，都是服务端 → 客户端：
 ## 12. Roadmap
 
 - [ ] 用 `//go:embed` 把 `static/` 打进二进制，真正单文件分发
+- [ ] 为 macOS / 其他 Unix 补 `sameExeOnPort` 兜底实现
+- [ ] Linux 下用 `xdg-open` 自动打开浏览器
 - [ ] 支持拖拽上传、粘贴截图上传
 - [ ] 消息删除、关键字搜索、历史分页
 - [ ] 访问口令 + 可选 HTTPS
