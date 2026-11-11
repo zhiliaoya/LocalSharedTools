@@ -575,11 +575,9 @@ WS 事件：`history`、`message_upsert`、`acl_changed`、`permissions_changed`
 
 ## 附录 C：版本资料索引
 
-- V1 原始说明：[V1/LocalSharedTools.md](V1/README.md)
-- V2 使用说明：[V2/README.md](V2/README.md)
-- V2 编译说明：[V2/编译说明.md](V2/编译说明.md)
+- V1 原始说明：[V1/README.md](v1/README.md)
+- V2 使用说明：[V2/README.md](v2/README.md)
 - V3 使用说明：[V3/README.md](V3/README.md)
-- V3 迭代计划：[V3/迭代升级计划.md](V3/迭代升级计划.md)
 - V3 权限矩阵：[V3/docs/权限矩阵.md](V3/docs/权限矩阵.md)
 - V3 运维手册：[V3/docs/运维手册.md](V3/docs/运维手册.md)
 
