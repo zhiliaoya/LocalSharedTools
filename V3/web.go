@@ -41,5 +41,8 @@ func (a *App) loadPages() error {
 	if a.noauthHTML, err = webFS.ReadFile("web/noauth.html"); err != nil {
 		return fmt.Errorf("读取 web/noauth.html 失败: %w", err)
 	}
+	if a.favicon, err = webFS.ReadFile("web/favicon.ico"); err != nil {
+		return fmt.Errorf("读取 web/favicon.ico 失败: %w", err)
+	}
 	return nil
 }

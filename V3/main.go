@@ -30,6 +30,7 @@ type App struct {
 	adminJS    []byte
 	hostJS     []byte
 	noauthHTML []byte
+	favicon    []byte
 
 	hostname       string
 	hostID         int64
@@ -109,6 +110,23 @@ func (a *App) handleLoginPage(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func (a *App) handleFavicon(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if len(a.favicon) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if _, err := w.Write(a.favicon); err != nil {
+		log.Printf("写 favicon 失败: %v", err)
+	}
+}
+
 func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"ok": "true", "version": appVersion})
 }
@@ -120,6 +138,7 @@ func (a *App) handleHealth(w http.ResponseWriter, r *http.Request) {
 func (a *App) routes() *http.ServeMux {
 	mux := a.apiMux()
 	mux.HandleFunc("/login", a.handleLoginPage)
+	mux.HandleFunc("/favicon.ico", a.handleFavicon)
 	mux.HandleFunc("/", a.handleApp)
 	return mux
 }

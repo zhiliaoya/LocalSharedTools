@@ -1,5 +1,7 @@
 # LocalShT V3
 
+> 项目从 V1 玩具、V2 半成品到 V3 产品的完整两天复盘，见 [总项目.md](../总项目.md)。
+
 局域网「文件传输助手」的 V3 版本。在 V2 的聊天 / 文件共享能力上，按 [V3 迭代升级计划](迭代升级计划.md) 叠加：
 
 - **九表数据层**：`role_types / share_types / share_levels / file_types / tokens / users / collections / records / shares`（+ `audit_log`）。
@@ -88,6 +90,7 @@ CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -tags embedstatic -trimpath \
 | --- | --- | --- | --- |
 | GET | `/` | 任意 token | 按角色实时组合的主页 / 设置页；未登录跳 `/login` |
 | GET | `/login` | 公开 | 链接 / 二维码落地：有效 token 写 Cookie 并跳 `/`，否则返回说明页 |
+| GET | `/favicon.ico` | 公开 | 站点图标（ICO，编译期内嵌） |
 | GET | `/static/` | 公开 | `app.css` / `app.js` 公共资源 |
 | POST | `/auth/login` | token | 脚本 / API 用：校验 token、下发 Cookie、返回身份载荷 |
 | GET | `/auth/me` | 任意 token | 身份 + `caps`；admin / host 额外返回角色与字典 |

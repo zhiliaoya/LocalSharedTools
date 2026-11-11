@@ -31,7 +31,7 @@ func TestRolePageComposition(t *testing.T) {
 	_, lv4Token := makeUser(t, app, "page-lv4", RoleLV4, host.UserID, ShareTypeSpecific, 3)
 
 	hostPage := pageBody(t, app, app.hostToken)
-	for _, want := range []string{`id="userList"`, `id="shareList"`, `window.AdminUI`, `window.HostUI`, `id="roleBadge"`, `settings-panel wide`} {
+	for _, want := range []string{`id="userList"`, `id="shareList"`, `window.AdminUI`, `window.HostUI`, `id="roleBadge"`, `settings-panel wide`, `/favicon.ico`} {
 		if !strings.Contains(hostPage, want) {
 			t.Errorf("host page missing %q", want)
 		}
@@ -112,6 +112,21 @@ func TestNormalUserPayloadHasNoRoleMetadata(t *testing.T) {
 	user, _ = out["user"].(map[string]interface{})
 	if user["role_id"] == nil || out["meta"] == nil {
 		t.Fatal("admin payload should contain role and meta")
+	}
+}
+
+func TestFavicon(t *testing.T) {
+	app := newTestApp(t)
+	srv := newTestServer(t, app)
+	resp, raw := doRequest(t, srv, "GET", "/favicon.ico", "", nil, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("favicon status = %d", resp.StatusCode)
+	}
+	if ct := resp.Header.Get("Content-Type"); ct != "image/x-icon" {
+		t.Fatalf("favicon content-type = %q", ct)
+	}
+	if len(raw) < 4 || raw[0] != 0 || raw[1] != 0 || raw[2] != 1 || raw[3] != 0 {
+		t.Fatalf("favicon is not a valid ICO, len=%d", len(raw))
 	}
 }
 
