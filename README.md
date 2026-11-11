@@ -1,6 +1,8 @@
 # LocalSharedTools
 
-> 局域网里的「文件传输助手」：在电脑和手机之间，像发微信一样传文本、传文件。
+> 局域网里的「文件传输助手」：Go 单程序 + 微信风格网页，手机扫码即可在电脑与手机间传文本、传文件；数据不出内网。代码 100% 由网页版 DeepSeek 生成，全程零 token 成本。
+>
+> A WeChat-style LAN file & text transfer helper: a single Go binary with a WeChat-like web UI. Scan the QR code to send text and files between your computer and phone — all data stays on your local network. 100% of the code was written by the web version of DeepSeek, at zero token cost.
 
 `Go 1.26+` · `SQLite` · `WebSocket` · `零 CGO` · `零 token 成本` · `MIT` · `100% AI 编写`
 
