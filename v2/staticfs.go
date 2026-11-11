@@ -13,6 +13,7 @@ import (
 // staticProvider 描述前端静态资源（index.html 模板 + /static/ 文件服务）的来源。
 type staticProvider struct {
 	ReadIndex  func() ([]byte, error)
+	ReadFile   func(name string) ([]byte, error) // 按文件名读取 static 下的文件
 	FileServer http.Handler
 	Desc       string
 }
@@ -27,7 +28,11 @@ func resolveStatic() (*staticProvider, error) {
 			return nil, fmt.Errorf("内嵌 static/index.html 读取失败: %w", err)
 		}
 		return &staticProvider{
-			ReadIndex:  func() ([]byte, error) { return index, nil },
+			ReadIndex: func() ([]byte, error) { return index, nil },
+			ReadFile: func(name string) ([]byte, error) {
+				// fs.ReadFile 本身拒绝 ..，安全
+				return fs.ReadFile(fsys, name)
+			},
 			FileServer: http.FileServer(http.FS(fsys)),
 			Desc:       "内嵌 static/（编译期 embedstatic）",
 		}, nil
@@ -40,6 +45,10 @@ func resolveStatic() (*staticProvider, error) {
 	return &staticProvider{
 		ReadIndex: func() ([]byte, error) {
 			return os.ReadFile(filepath.Join(dir, "index.html"))
+		},
+		ReadFile: func(name string) ([]byte, error) {
+			// filepath.Clean("/"+name) 把 ../x 规整成 /x，再 Join 到 dir 下，防目录穿越
+			return os.ReadFile(filepath.Join(dir, filepath.Clean("/"+name)))
 		},
 		FileServer: http.FileServer(http.Dir(dir)),
 		Desc:       "磁盘 " + dir,

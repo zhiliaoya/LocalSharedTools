@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"mime"
 	"net"
-	"html/template"
 	"net/http"
 	"os"
 	"os/exec"
@@ -33,7 +33,7 @@ var (
 )
 
 var (
-	tmpl             *template.Template // 见 staticfs.go 中 parseIndexTemplate
+	tmpl             *template.Template // 见 staticfs.go 中 mustInitStatic
 	hub              *Hub
 	database         *sql.DB
 	hostname         string
@@ -795,6 +795,35 @@ func downloadHandler(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, f)
 }
 
+// ---------- favicon ----------
+
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	sp, err := resolveStatic()
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	data, err := sp.ReadFile("favicon.ico")
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	if r.Method == http.MethodHead {
+		return
+	}
+	w.Write(data)
+}
+
 // ---------- 端口 ----------
 
 func localIPs() []string {
@@ -936,6 +965,7 @@ func main() {
 	mux := http.NewServeMux()
 	mustInitStatic(mux) // 解析 index.html 模板 + 注册 /static/
 
+	mux.HandleFunc("/favicon.ico", faviconHandler)
 	mux.HandleFunc("/ws", wsHandler)
 	mux.HandleFunc("/history", historyHandler)
 	mux.HandleFunc("/texts", createTextHandler)
