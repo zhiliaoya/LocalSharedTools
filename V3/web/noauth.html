@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LocalShT</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --green: #07c160;
+    --bg: #ededed;
+    --white: #fff;
+    --text: #191919;
+    --muted: #888;
+    --border: #e5e5e5;
+    --font: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB",
+            "Microsoft YaHei", "Segoe UI", Roboto, sans-serif;
+  }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    font-size: 15px;
+    line-height: 1.5;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .card {
+    width: 100%;
+    max-width: 420px;
+    background: var(--white);
+    border-radius: 14px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, .10);
+    padding: 30px 26px 24px;
+    text-align: center;
+  }
+  .logo {
+    width: 54px; height: 54px;
+    border-radius: 14px;
+    background: var(--green);
+    color: #fff;
+    font-size: 26px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+  }
+  h1 { font-size: 18px; font-weight: 600; }
+  p { margin-top: 12px; font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .box {
+    margin-top: 18px;
+    padding: 12px 14px;
+    border: 1px dashed var(--border);
+    border-radius: 8px;
+    background: #fafafa;
+    font-size: 12px;
+    color: #666;
+    text-align: left;
+    line-height: 1.7;
+  }
+  code {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    background: #f2f2f2;
+    padding: 1px 4px;
+    border-radius: 3px;
+  }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">⇄</div>
+    <h1>需要登录链接</h1>
+    <p>本应用不再提供 token 输入框。请使用 host / admin 发送给你的登录链接或二维码访问。</p>
+    <div class="box">
+      如果你是本机 host：token 保存在 <code>LocalShT/data/host_token.txt</code>，
+      可用 <code>/login?token=&lt;token&gt;</code> 打开；token 丢失时用
+      <code>-host-token</code> 重签。<br><br>
+      普通用户：请向 host / admin 索取新的登录链接。
+    </div>
+  </div>
+</body>
+</html>
