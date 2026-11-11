@@ -2,6 +2,7 @@ package main
 
 import (
 	"database/sql"
+	_ "embed"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -18,7 +19,9 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/gorilla/websocket"
 	qrcode "github.com/skip2/go-qrcode"
@@ -39,6 +42,16 @@ var (
 	hostname         string
 	actualPortGlobal int
 )
+
+// 页面内嵌进二进制：单独一个 exe 就能跑，不再依赖外部 static 目录
+//
+//go:embed static/index.html
+var embeddedIndex []byte
+
+// 图标同样内嵌，保证单 exe 独立运行
+//
+//go:embed static/favicon.ico
+var embeddedFavicon []byte
 
 // 相邻同人文件合组的时间窗口
 const fileGroupWindowMs = int64(60 * 1000)
@@ -578,12 +591,41 @@ func uniquePath(dir, name string) string {
 	return filepath.Join(dir, fmt.Sprintf("%s_%d%s", base, time.Now().UnixNano(), ext))
 }
 
+// ---------- favicon ----------
+
+// faviconHandler 返回内嵌的 favicon.ico。
+// 没有注册这条路由时，/favicon.ico 会命中兜底的 "/" → indexHandler → 返回 HTML，
+// 浏览器就会报 "Resource interpreted as Image but transferred with MIME type text/html"。
+func faviconHandler(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet && r.Method != http.MethodHead {
+		w.Header().Set("Allow", "GET, HEAD")
+		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	w.Header().Set("Content-Type", "image/x-icon")
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	if r.Method == http.MethodHead {
+		return
+	}
+	if len(embeddedFavicon) == 0 {
+		// 兜底：没内嵌图标也别让浏览器报 500，静默 204
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	_, _ = w.Write(embeddedFavicon)
+}
+
 // ---------- 页面 ----------
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		w.Header().Set("Allow", "GET, HEAD")
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	// "/" 是 ServeMux 的兜底匹配，必须显式判路径，否则 /abc 也会返回首页
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -896,6 +938,80 @@ func shareQRHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write(png)
 }
 
+// ---------- 单实例检测（Windows 专属，运行时守卫）----------
+
+// pidOnPort 解析 netstat 输出，找监听指定端口的 PID
+func pidOnPort(p int) (int, bool) {
+	if runtime.GOOS != "windows" {
+		return 0, false
+	}
+	out, err := exec.Command("netstat", "-ano", "-p", "tcp").Output()
+	if err != nil {
+		return 0, false
+	}
+	needle := fmt.Sprintf(":%d ", p)
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.Contains(line, "LISTENING") || !strings.Contains(line, needle) {
+			continue
+		}
+		fields := strings.Fields(line)
+		if len(fields) < 5 {
+			continue
+		}
+		pid, err := strconv.Atoi(fields[len(fields)-1])
+		if err == nil && pid > 0 {
+			return pid, true
+		}
+	}
+	return 0, false
+}
+
+// exePathOfPID 查询指定 PID 的可执行文件完整路径（Windows API）
+func exePathOfPID(pid int) (string, error) {
+	if runtime.GOOS != "windows" {
+		return "", fmt.Errorf("not windows")
+	}
+	const PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+	kernel32 := syscall.NewLazyDLL("kernel32.dll")
+	openProc := kernel32.NewProc("OpenProcess")
+	queryFull := kernel32.NewProc("QueryFullProcessImageNameW")
+	closeHandle := kernel32.NewProc("CloseHandle")
+
+	h, _, callErr := openProc.Call(PROCESS_QUERY_LIMITED_INFORMATION, 0, uintptr(pid))
+	if h == 0 {
+		return "", fmt.Errorf("OpenProcess failed: %v", callErr)
+	}
+	defer closeHandle.Call(h)
+
+	buf := make([]uint16, syscall.MAX_PATH)
+	size := uint32(len(buf))
+	r, _, callErr := queryFull.Call(h, 0, uintptr(unsafe.Pointer(&buf[0])), uintptr(unsafe.Pointer(&size)))
+	if r == 0 {
+		return "", fmt.Errorf("QueryFullProcessImageName failed: %v", callErr)
+	}
+	return syscall.UTF16ToString(buf[:size]), nil
+}
+
+// sameExeOnPort：占用端口的进程是否就是当前 exe（同一路径）
+func sameExeOnPort(p int) (int, bool) {
+	pid, ok := pidOnPort(p)
+	if !ok {
+		return 0, false
+	}
+	other, err := exePathOfPID(pid)
+	if err != nil {
+		return pid, false
+	}
+	self, err := os.Executable()
+	if err != nil {
+		return pid, false
+	}
+	a, _ := filepath.Abs(other)
+	b, _ := filepath.Abs(self)
+	return pid, strings.EqualFold(a, b)
+}
+
 // ---------- main ----------
 
 // openBrowser 用默认浏览器打开 URL（仅 Windows 有效）
@@ -943,15 +1059,32 @@ func main() {
 	}
 	defer database.Close()
 
-	staticDir, err := findStaticDir()
-	if err != nil {
-		log.Fatal(err)
+	// 默认用内嵌页面，保证单个 exe 可独立运行
+	tmpl = template.Must(template.New("index.html").Parse(string(embeddedIndex)))
+
+	// 决定 favicon 来源：磁盘上有就用磁盘（开发模式），否则用内嵌
+	var faviconServe http.HandlerFunc
+	if staticDir, derr := findStaticDir(); derr == nil {
+		// 开发模式：exe 同级或工作目录存在 static/index.html 时优先用磁盘文件，
+		// 改完刷新即可生效，无需重新编译。
+		if _, serr := os.Stat(filepath.Join(staticDir, "index.html")); serr == nil {
+			tmpl = template.Must(template.ParseFiles(filepath.Join(staticDir, "index.html")))
+			http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
+		}
+		if _, serr := os.Stat(filepath.Join(staticDir, "favicon.ico")); serr == nil {
+			p := filepath.Join(staticDir, "favicon.ico")
+			faviconServe = func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Cache-Control", "public, max-age=86400")
+				http.ServeFile(w, r, p)
+			}
+		}
 	}
-	tmpl = template.Must(template.ParseFiles(filepath.Join(staticDir, "index.html")))
+	if faviconServe == nil {
+		faviconServe = faviconHandler
+	}
 
 	hub = NewHub()
 
-	http.Handle("/static/", http.StripPrefix("/static/", http.FileServer(http.Dir(staticDir))))
 	http.HandleFunc("/ws", wsHandler)
 	http.HandleFunc("/history", historyHandler)
 	http.HandleFunc("/texts", createTextHandler)
@@ -959,6 +1092,7 @@ func main() {
 	http.HandleFunc("/download", downloadHandler)
 	http.HandleFunc("/share/info", shareInfoHandler)
 	http.HandleFunc("/share/qr", shareQRHandler)
+	http.HandleFunc("/favicon.ico", faviconServe) // ← 新增
 	http.HandleFunc("/", indexHandler)
 
 	requestedPort := *port
