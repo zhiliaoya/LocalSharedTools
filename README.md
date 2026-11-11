@@ -1,5 +1,6 @@
 # LocalSharedTools：
 > A WeChat-style LAN file & text transfer helper: a single Go binary, scan a QR code to send text/files between computer and phone—data never leaves your LAN. V1/V2 via web-based DeepSeek chat; V3 productized with DeepSeek Harness + V4.1-Flash (~¥5.92).
+> 
 > 局域网里的「文件传输助手」：Go 单程序 + 微信风网页，扫码即可在电脑与手机间传文本/文件，数据不出内网。V1/V2 由网页版 DeepSeek 对话生成；V3 由 DeepSeek Harness + V4.1-Flash 完成产品化（权限/角色/审计/测试），成本约 ¥5.92。
 # 两天从 V1 玩具到 V3 产品的迭代总览：
 > **项目**：LocalSharedTools（模块名 `LocalShT`）
